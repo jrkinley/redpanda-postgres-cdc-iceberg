@@ -52,6 +52,8 @@ services:
       # Credentials are required, but our catalog ignores them
       - --set redpanda.iceberg_rest_catalog_client_id=catalog
       - --set redpanda.iceberg_rest_catalog_client_secret=catalog123
+      # Way too low of a commit interval for real life - I think. But make the demo fast
+      - --set redpanda.iceberg_catalog_commit_interval_ms=5000
     volumes:
       - redpanda-0:/var/lib/redpanda/data
     networks:
