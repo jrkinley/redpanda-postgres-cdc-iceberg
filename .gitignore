@@ -189,3 +189,4 @@ notebooks
 !spark/notebooks
 
 .vscode
+volumes

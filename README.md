@@ -17,23 +17,61 @@
  under the License.
 -->
 
-# Spark + Iceberg Quickstart Image
+# Redpanda + Iceberg + Spark Quickstart Image
 
-This is a docker compose environment to quickly get up and running with a Spark environment and a local REST
+This is a docker compose environment to quickly get up and running with Redpanda, a Spark environment and a local REST
 catalog, and MinIO as a storage backend.
 
 **note**: If you don't have docker installed, you can head over to the [Get Docker](https://docs.docker.com/get-docker/)
 page for installation instructions.
 
+**note**: If you don't have rpk installed, you can head over to the [Install RPK](https://docs.redpanda.com/current/get-started/rpk-install/)
+page for installation instructions.
+
 ## Usage
 Start up the notebook server by running the following.
-```
-docker-compose up
+
+```shell
+docker compose build && docker compose up
 ```
 
-The notebook server will then be available at http://localhost:8888
+Create and switch to a new rpk profile so that you can issue rpk commands
+
+```shell
+rpk profile create docker-compose-iceberg --set=admin_api.addresses=localhost:19644 --set=brokers=localhost:19092 --set=schema_registry.addresses=localhost:18081
+```
+
+Create two topics with iceberg enabled:
+
+```
+rpk topic create topic_a --topic-config=redpanda.iceberg.mode=key_value
+rpk topic create topic_b --topic-config=redpanda.iceberg.mode=value_schema_id_prefix
+```
+
+Now we can produce data against the key_value topic and see data show up.
+
+```
+echo "hello world\nfoo bar\nbaz qux" | rpk topic produce topic_a --format='%k %v\n'
+```
+
+The notebook server will then be available at http://localhost:8888 see the single notebook will guide you through querying that table.
+
+Next we will show how the schema registry integration works. First we need to create the schema in the schema registry:
+
+```
+rpk registry schema create topic_b-value --schema schema.avsc
+```
+
+```
+echo '{"user_id":2324,"event_type":"BUTTON_CLICK","ts":"2024-11-25T20:23:59.380Z"}\n{"user_id":3333,"event_type":"SCROLL","ts":"2024-11-25T20:24:14.774Z"}\n{"user_id":7272,"event_type":"BUTTON_CLICK","ts":"2024-11-25T20:24:34.552Z"}' | rpk topic produce topic_b --format='%v\n' --schema-id=topic
+```
+
+Once the data is committed, shortly the data should be available in Iceberg format and you can query the table `demo.redpanda.topic_b` in the notebook.
+
+## Alternative query interfaces
 
 While the notebook server is running, you can use any of the following commands if you prefer to use spark-shell, spark-sql, or pyspark.
+
 ```
 docker exec -it spark-iceberg spark-shell
 ```
@@ -45,42 +83,3 @@ docker exec -it spark-iceberg pyspark
 ```
 
 To stop everything, just run `docker-compose down`.
-
-## Troubleshooting & Maintenance
-
-### Refreshing Docker Image
-
-The prebuilt spark image is uploaded to Dockerhub. Out of convenience, the image tag defaults to `latest`.
-
-If you have an older version of the image, you might need to remove it to upgrade.
-```bash
-docker image rm tabulario/spark-iceberg && docker-compose pull
-```
-
-### Building the Docker Image locally
-
-If you want to make changes to the local files, and test them out, you can build the image locally and use that instead:
-
-```bash
-docker image rm tabulario/spark-iceberg && docker-compose build
-```
-
-### Use `Dockerfile` In This Repo
-
-To directly use the Dockerfile in this repo (as opposed to pulling the pre-build `tabulario/spark-iceberg` image), you can use `docker-compose build`.
-
-### Deploying Changes
-
-To deploy changes to the hosted docker image `tabulario/spark-iceberg`, run the following. (Requires access to the tabulario docker hub account)
-
-```sh
-cd spark
-docker buildx build -t tabulario/spark-iceberg --platform=linux/amd64,linux/arm64 . --push
-```
-
----
-
-For more information on getting started with using Iceberg, checkout
-the [Quickstart](https://iceberg.apache.org/spark-quickstart/) guide in the official docs.
-
-The repository for the docker image is [located on dockerhub](https://hub.docker.com/r/tabulario/spark-iceberg).
