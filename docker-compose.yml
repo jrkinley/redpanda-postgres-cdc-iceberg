@@ -3,12 +3,8 @@ networks:
   redpanda_network:
     driver: bridge
 volumes:
-  redpanda-0:
-    driver: local
-    driver_opts:
-      o: bind
-      type: rw
-      device: ${PWD}/volumes/redpanda-0
+  redpanda-0: null
+  minio: null
 services:
   redpanda-0:
     container_name: redpanda-0
@@ -82,7 +78,7 @@ services:
       MINIO_REGION_NAME: local
       MINIO_DOMAIN: minio
     volumes:
-      - ./volumes/minio/data:/data
+      - minio:/data
     networks:
       redpanda_network:
         aliases:
@@ -153,9 +149,6 @@ services:
     depends_on:
       - minio
       - catalog
-    volumes:
-      - ./volumes/warehouse:/home/iceberg/warehouse
-      - ./volumes/notebooks:/home/iceberg/notebooks/notebooks
     environment:
       - AWS_ACCESS_KEY_ID=minio
       - AWS_SECRET_ACCESS_KEY=minio123
