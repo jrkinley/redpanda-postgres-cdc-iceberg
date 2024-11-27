@@ -9,7 +9,7 @@ services:
   redpanda-0:
     container_name: redpanda-0
     # Use the latest nightly version of Redpanda
-    image: docker.redpanda.com/redpandadata/redpanda-nightly:v0.0.0-20241125gite8155a4
+    image: docker.redpanda.com/redpandadata/redpanda-nightly:v0.0.0-20241127git970b613
     command:
       - redpanda
       - start
