@@ -1,0 +1,25 @@
+input:
+  label: "postgres_cdc"
+  postgres_cdc:
+    dsn: "postgresql://nasdaq-historical-quotes_owner:${NEON_PASSWORD}@ep-lucky-surf-a4d6rtwa.us-east-1.aws.neon.tech/nasdaq-historical-quotes?sslmode=require"
+    stream_snapshot: true
+    schema: public
+    tables:
+      - quotes
+    temporary_slot: true
+
+pipeline:
+  processors:
+    - schema_registry_encode:
+        url: "http://localhost:18081"
+        subject: quotes-value
+        refresh_period: 1m
+    - catch:
+      - log:
+          message: "Processing failed due to: ${!error()}"
+
+output:
+  kafka_franz:
+    seed_brokers:
+      - ${REDPANDA_BROKERS}
+    topic: quotes

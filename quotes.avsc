@@ -1,0 +1,15 @@
+{
+    "type" : "record",
+    "namespace" : "com.nasdaq",
+    "name" : "HistoricalQuote",
+    "fields" : [
+        { "name": "id", "type" : "long" },
+        { "name": "symbol", "type" : "string" },
+        { "name": "date", "type" : "string" },
+        { "name": "close", "type": "string" },
+        { "name": "volume", "type": "int" },
+        { "name": "open", "type": "string" },
+        { "name": "high", "type": "string" },
+        { "name": "low", "type": "string" }
+    ]
+}

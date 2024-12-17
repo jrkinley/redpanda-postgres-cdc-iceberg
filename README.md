@@ -1,85 +1,87 @@
-<!--
- Licensed to the Apache Software Foundation (ASF) under one
- or more contributor license agreements.  See the NOTICE file
- distributed with this work for additional information
- regarding copyright ownership.  The ASF licenses this file
- to you under the Apache License, Version 2.0 (the
- "License"); you may not use this file except in compliance
- with the License.  You may obtain a copy of the License at
+# Redpanda Connect Postgres CDC to Iceberg Demo
 
-   http://www.apache.org/licenses/LICENSE-2.0
+This is a docker compose environment to quickly demonstrate how to use Redpanda Connect's Postgres CDC connector to stream database transactions into a Redpanda Iceberg topic. Includes a MinIO storage backend, an Apache Spark environment, and a local REST catalog for querying the Iceberg tables.
 
- Unless required by applicable law or agreed to in writing,
- software distributed under the License is distributed on an
- "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- KIND, either express or implied.  See the License for the
- specific language governing permissions and limitations
- under the License.
--->
+This is a fork of Databricks' [Spark + Iceberg Quickstart Image](https://github.com/databricks/docker-spark-iceberg).
 
-# Redpanda + Iceberg + Spark Quickstart Image
-
-This is a docker compose environment to quickly get up and running with Redpanda, a Spark environment and a local REST
-catalog, and MinIO as a storage backend.
+**note**: If you don't have a free Neon account, you can head over to [Neon](https://neon.tech/) page to sign up. After creating a database, make sure to enable Logical Replication under Settings.
 
 **note**: If you don't have docker installed, you can head over to the [Get Docker](https://docs.docker.com/get-docker/)
 page for installation instructions.
 
-**note**: If you don't have rpk installed, you can head over to the [Install RPK](https://docs.redpanda.com/current/get-started/rpk-install/)
-page for installation instructions.
+**note**: If you don't have rpk installed, you can head over to the [Install RPK](https://docs.redpanda.com/current/get-started/rpk-install/) page for installation instructions.
 
 ## Usage
-Start up the notebook server by running the following.
+
+### Start up environment
 
 ```shell
 docker compose build && docker compose up
 ```
 
-Create and switch to a new rpk profile so that you can issue rpk commands
+- [Redpanda Console](http://localhost:8081)
+- [Jupyter Notebook](http://localhost:8888)
+
+### Create local .env file
 
 ```shell
-rpk profile create docker-compose-iceberg --set=admin_api.addresses=localhost:19644 --set=brokers=localhost:19092 --set=schema_registry.addresses=localhost:18081
+cat .env
+NEON_PASSWORD=******
+REDPANDA_BROKERS=localhost:19092
 ```
 
-Create two topics with iceberg enabled:
+### Create Postgres (Neon) database
 
-```
-rpk topic create topic_a --topic-config=redpanda.iceberg.mode=key_value
-rpk topic create topic_b --topic-config=redpanda.iceberg.mode=value_schema_id_prefix
-```
+```sql
+psql '<connection string>'
 
-Now we can produce data against the key_value topic and see data show up.
+CREATE TABLE "quotes" (
+    "id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    "symbol" text NOT NULL,
+    "date" date NOT NULL,
+    "close" text NOT NULL,
+    "volume" integer NOT NULL,
+    "open" text NOT NULL,
+    "high" text NOT NULL,
+    "low" text NOT NULL
+);
 
-```
-echo "hello world\nfoo bar\nbaz qux" | rpk topic produce topic_a --format='%k %v\n'
-```
+\copy quotes(symbol, date, close, volume, open, high, low) from '/path/to/redpanda-postgres-cdc-iceberg/data/AAPL_historical_max.csv' csv header;
+\copy quotes(symbol, date, close, volume, open, high, low) from '/path/to/redpanda-postgres-cdc-iceberg/data/META_historical_max.csv' csv header;
+\copy quotes(symbol, date, close, volume, open, high, low) from '/path/to/redpanda-postgres-cdc-iceberg/data/MSFT_historical_max.csv' csv header;
 
-The notebook server will then be available at http://localhost:8888 see the single notebook will guide you through querying that table.
+SELECT * FROM quotes LIMIT 10;
 
-Next we will show how the schema registry integration works. First we need to create the schema in the schema registry:
-
-```
-rpk registry schema create topic_b-value --schema schema.avsc
-```
-
-```
-echo '{"user_id":2324,"event_type":"BUTTON_CLICK","ts":"2024-11-25T20:23:59.380Z"}\n{"user_id":3333,"event_type":"SCROLL","ts":"2024-11-25T20:24:14.774Z"}\n{"user_id":7272,"event_type":"BUTTON_CLICK","ts":"2024-11-25T20:24:34.552Z"}' | rpk topic produce topic_b --format='%v\n' --schema-id=topic
-```
-
-Once the data is committed, shortly the data should be available in Iceberg format and you can query the table `demo.redpanda.topic_b` in the notebook.
-
-## Alternative query interfaces
-
-While the notebook server is running, you can use any of the following commands if you prefer to use spark-shell, spark-sql, or pyspark.
-
-```
-docker exec -it spark-iceberg spark-shell
-```
-```
-docker exec -it spark-iceberg spark-sql
-```
-```
-docker exec -it spark-iceberg pyspark
+SELECT symbol, min(date) AS min_date, max(date) AS max_date, count(*)
+FROM quotes
+GROUP BY symbol;
 ```
 
-To stop everything, just run `docker-compose down`.
+### Create Redpanda Iceberg table
+
+```shell
+rpk profile create docker-compose-iceberg \
+    --set=admin_api.addresses=localhost:19644 \
+    --set=brokers=localhost:19092 \
+    --set=schema_registry.addresses=localhost:18081
+
+rpk topic create quotes --topic-config=redpanda.iceberg.mode=value_schema_id_prefix
+rpk registry schema create quotes-value --schema quotes.avsc
+```
+
+### Run Postgres CDC pipeline
+
+```shell
+rpk connect run -e .env postgres-cdc.yaml
+```
+
+### Query Iceberg table from Spark
+
+Open and run the [Jupyter Notebook](http://localhost:8888) to query the Iceberg table.
+
+Insert a new record into the Postgres table and rerun the Spark queries to check the CDC records are streaming through:
+
+```sql
+INSERT INTO quotes
+VALUES (default, 'AAPL', '2024-12-06', '$242.84', 36870620, '$242.905', '$244.63', '$242.08');
+```
